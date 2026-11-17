@@ -1,6 +1,6 @@
 # Spell Renderer
 
-A fast, lightweight OpenGL wrapper for Minecraft, designed for rendering 2D objects with a clean, fluent API.
+A fast, lightweight 2D renderer for Minecraft, designed for rendering 2D objects with a clean, fluent API. Built on Minecraft's own render API, so it works with both the OpenGL and the Vulkan backend.
 
 ![preview](.github/assets/preview.png)
 
@@ -18,10 +18,10 @@ A fast, lightweight OpenGL wrapper for Minecraft, designed for rendering 2D obje
 
 ## Requirements
 
-- Minecraft: `1.21.8`
-- Fabric Loader: `>=0.18.5`
-- Fabric API: `0.136.1+1.21.8`
-- Java: `21`
+- Minecraft: `26.2`
+- Fabric Loader: `>=0.20.1`
+- Fabric API: `0.161.0+26.2`
+- Java: `25`
 
 ## Installation
 
@@ -118,7 +118,7 @@ Recomended flags:
 
 ```java
 ClientLifecycleEvents.CLIENT_STARTED.register(client -> { // ONLY THIS EVENT. NOT onInitializeClient()!
-    FontManager.load("key", ResourceLocation.fromNamespaceAndPath("Your mod id", "fonts/inter"));
+    FontManager.load("key", Identifier.fromNamespaceAndPath("Your mod id", "fonts/inter"));
     // WRITE THE FILE NAME WITHOUT THE EXTENSION e.g. fonts/inter.png -> fonts/inter
 });
 ```

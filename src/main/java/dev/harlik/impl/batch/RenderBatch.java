@@ -1,38 +1,37 @@
 package dev.harlik.impl.batch;
 
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.harlik.api.scissors.Region;
 import dev.harlik.api.scissors.Scissors;
-import dev.harlik.impl.buffer.VertexBuffer;
 import dev.harlik.impl.buffer.VertexFormat;
-import dev.harlik.impl.shader.Shader;
-import java.nio.FloatBuffer;
+import dev.harlik.impl.gpu.FrameUniforms;
+import dev.harlik.impl.gpu.SpellPipelines;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiConsumer;
 import lombok.Getter;
-import org.lwjgl.system.MemoryUtil;
-import static org.lwjgl.opengl.GL33.*;
 
 public class RenderBatch {
 
     record Entry(float z, float[] data, int textureId, Region scissors) {}
 
-    private Shader shader;
-    private VertexFormat format;
-    private VertexBuffer buffer;
+    private final RenderPipeline pipeline;
+    /** Sampler the entry textures are bound to, or null when the batch is untextured. */
+    private final String sampler;
 
     @Getter
-    private List<Entry> entries = new ArrayList<>();
-    private int drawMode;
+    private final List<Entry> entries = new ArrayList<>();
     private final int floatsPerVertex;
-    private Runnable preDraw;
-    private Runnable postDraw;
-    private FloatBuffer floatBuffer;
+    private BiConsumer<RenderPass, FrameUniforms> bindings;
 
-    public RenderBatch(Shader shader, VertexFormat format, int drawMode) {
-        this.shader = shader;
-        this.format = format;
-        this.drawMode = drawMode;
-        this.buffer = new VertexBuffer();
+    public RenderBatch(RenderPipeline pipeline, VertexFormat format, String sampler) {
+        this.pipeline = pipeline;
+        this.sampler = sampler;
         this.floatsPerVertex = format.getFloats();
     }
 
@@ -40,80 +39,46 @@ public class RenderBatch {
         entries.add(new Entry(z, vertexData, textureId, Scissors.current()));
     }
 
-    public RenderBatch preDraw(Runnable preDraw) {
-        this.preDraw = preDraw;
+    /** Extra uniforms and textures the pipeline needs besides the projection. */
+    public RenderBatch bindings(BiConsumer<RenderPass, FrameUniforms> bindings) {
+        this.bindings = bindings;
         return this;
     }
 
-    public RenderBatch postDraw(Runnable postDraw) {
-        this.postDraw = postDraw;
-        return this;
-    }
-
-    public void flush(float[] projection, List<Entry> runEntries) {
+    /** Draws a run of entries whose vertices were uploaded, in order, to the given slice. */
+    public void draw(RenderPass pass, GpuBufferSlice vertices, List<Entry> runEntries, FrameUniforms uniforms) {
         if (runEntries.isEmpty()) return;
 
-        int runFloats = 0;
-        for (Entry e : runEntries) runFloats += e.data().length;
+        pass.setPipeline(pipeline);
+        pass.setUniform(SpellPipelines.PROJECTION_BLOCK, uniforms.projection());
+        if (bindings != null) bindings.accept(pass, uniforms);
+        pass.setVertexBuffer(0, vertices);
 
-        if (floatBuffer == null || floatBuffer.capacity() < runFloats) {
-            int newCapacity = floatBuffer == null ? runFloats : floatBuffer.capacity();
-            while (newCapacity < runFloats) newCapacity *= 2;
-            if (floatBuffer != null) MemoryUtil.memFree(floatBuffer);
-            floatBuffer = MemoryUtil.memAllocFloat(newCapacity);
-        }
-        floatBuffer.clear();
-
-        for (Entry entry : runEntries) {
-            floatBuffer.put(entry.data());
-        }
-        floatBuffer.flip();
-
-        buffer.setup(floatBuffer, format);
-        shader.bind();
-        shader.setUniformMat4("uProjection", projection);
-        shader.setUniform1i("uTexture", 0);
-        if (preDraw != null) preDraw.run();
-
-        int currentTexture = -1;
+        int currentTexture = runEntries.getFirst().textureId();
         int vertexOffset = 0;
         int runStartVertex = 0;
 
-        for (int i = 0; i <= runEntries.size(); i++) {
-            int tex = (i < runEntries.size()) ? runEntries.get(i).textureId() : -2;
-            if (tex != currentTexture) {
-                if (i > 0) {
-                    drawRun(runStartVertex, vertexOffset - runStartVertex, currentTexture);
-                }
-                currentTexture = tex;
+        for (Entry entry : runEntries) {
+            if (entry.textureId() != currentTexture) {
+                drawRun(pass, runStartVertex, vertexOffset - runStartVertex, currentTexture);
+                currentTexture = entry.textureId();
                 runStartVertex = vertexOffset;
             }
-            if (i < runEntries.size()) {
-                vertexOffset += runEntries.get(i).data().length / floatsPerVertex;
-            }
+            vertexOffset += entry.data().length / floatsPerVertex;
         }
-
-        shader.unbind();
-        if (postDraw != null) postDraw.run();
+        drawRun(pass, runStartVertex, vertexOffset - runStartVertex, currentTexture);
     }
 
-    private void drawRun(int vertexOffset, int vertexCount, int textureId) {
-        if (textureId > 0) {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, textureId);
+    private void drawRun(RenderPass pass, int firstVertex, int vertexCount, int textureId) {
+        if (sampler != null) {
+            GpuTextureView view = TextureCache.INSTANCE.view(textureId);
+            if (view == null) return; // texture failed to load
+            pass.bindTexture(sampler, view, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
         }
-        buffer.draw(drawMode, vertexOffset, vertexCount);
+        pass.draw(vertexCount, 1, firstVertex, 0);
     }
 
     public void clear() {
         entries.clear();
-    }
-
-    public void destroy() {
-        buffer.destroy();
-        if (floatBuffer != null) {
-            MemoryUtil.memFree(floatBuffer);
-            floatBuffer = null;
-        }
     }
 }

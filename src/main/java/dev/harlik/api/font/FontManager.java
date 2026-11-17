@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.minecraft.client.Minecraft;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 
@@ -23,16 +23,16 @@ public class FontManager {
 
     public void init() {
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
-            load("spell_fallback", ResourceLocation.fromNamespaceAndPath(SpellRenderer.MOD_ID, "fonts/inter"));
+            load("spell_fallback", Identifier.fromNamespaceAndPath(SpellRenderer.MOD_ID, "fonts/inter"));
 
             fallback = fonts.get("spell_fallback");
         });
     }
 
-    public void load(String key, ResourceLocation baseName) {
-        ResourceLocation jsonLoc = ResourceLocation.fromNamespaceAndPath(
+    public void load(String key, Identifier baseName) {
+        Identifier jsonLoc = Identifier.fromNamespaceAndPath(
                 baseName.getNamespace(), baseName.getPath() + ".json");
-        ResourceLocation pngLoc = ResourceLocation.fromNamespaceAndPath(
+        Identifier pngLoc = Identifier.fromNamespaceAndPath(
                 baseName.getNamespace(), baseName.getPath() + ".png");
 
         ResourceManager rm = Minecraft.getInstance().getResourceManager();

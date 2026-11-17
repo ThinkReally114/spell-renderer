@@ -1,11 +1,13 @@
-#version 330 core
+#version 330
 
 // Dual Kawase downsample: renders the source level into a level half its size.
 
 in vec2 vUV;
 
 uniform sampler2D uSource;
-uniform vec2 uTexel; // 1 / source level size
+layout(std140) uniform SpellKawase {
+    vec2 uTexel; // 1 / source level size
+};
 
 out vec4 fragColor;
 

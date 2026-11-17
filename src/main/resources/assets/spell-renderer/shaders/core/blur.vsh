@@ -1,4 +1,4 @@
-#version 330 core
+#version 330
 
 // Fullscreen triangle generated from gl_VertexID, draw with 3 vertices and no attributes.
 

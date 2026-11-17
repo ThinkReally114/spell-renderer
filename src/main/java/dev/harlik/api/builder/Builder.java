@@ -2,7 +2,7 @@ package dev.harlik.api.builder;
 
 import dev.harlik.api.builder.shapes.*;
 import dev.harlik.impl.batch.BatchManager;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public class Builder {
 
@@ -14,7 +14,7 @@ public class Builder {
         return new ShapeCircle(BatchManager.INSTANCE.getRectangle());
     }
 
-    public static ShapeImage image(ResourceLocation texture) {
+    public static ShapeImage image(Identifier texture) {
         return new ShapeImage(BatchManager.INSTANCE.getImage(), texture);
     }
 

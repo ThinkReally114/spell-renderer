@@ -1,28 +1,22 @@
 package dev.harlik;
 
-import com.mojang.blaze3d.opengl.GlDevice;
-import com.mojang.blaze3d.opengl.GlStateManager;
-import com.mojang.blaze3d.opengl.GlTexture;
-import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.systems.RenderSystem;
 import dev.harlik.api.RenderContext;
 import dev.harlik.api.builder.Builder;
 import dev.harlik.api.builder.shapes.ShapeGlass;
 import dev.harlik.api.font.FontManager;
 import dev.harlik.api.scale.Scale;
 import dev.harlik.api.scissors.Scissors;
-import dev.harlik.impl.GlState;
 import dev.harlik.impl.batch.BatchManager;
 import dev.harlik.impl.drag.DragManager;
-import dev.harlik.impl.shader.ShaderManager;
+import dev.harlik.impl.gpu.SpellFrame;
+import dev.harlik.impl.gpu.SpellPipelines;
 import java.awt.Color;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.Minecraft;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import static org.lwjgl.opengl.GL33.*;
 
 public class SpellRenderer implements ClientModInitializer {
 
@@ -31,7 +25,7 @@ public class SpellRenderer implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
-		ShaderManager.INSTANCE.init();
+		ClientLifecycleEvents.CLIENT_STARTED.register(client -> SpellPipelines.precompileAll());
         FontManager.INSTANCE.init();
 
         if (FabricLoader.getInstance().isDevelopmentEnvironment()) {
@@ -48,7 +42,7 @@ public class SpellRenderer implements ClientModInitializer {
                         .radius(12)
                         .color(Color.WHITE, Color.BLACK, Color.WHITE, Color.BLACK)
                         .submit();
-                Builder.image(ResourceLocation.fromNamespaceAndPath(SpellRenderer.MOD_ID, "icon.png"))
+                Builder.image(Identifier.fromNamespaceAndPath(SpellRenderer.MOD_ID, "icon.png"))
                         .pos(180, 10)
                         .size(128, 128)
                         .radius(24, 0.6f)
@@ -146,42 +140,16 @@ public class SpellRenderer implements ClientModInitializer {
                 .submit();
     }
 
-    public static void bindGUIFramebuffer() { // Framebuffer 0 - right after mojang's swap, after evrth is drawn
-        var window = Minecraft.getInstance().getWindow();
-        GlStateManager._glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        GlStateManager._viewport(0, 0, window.getWidth(), window.getHeight());
-    }
-
-	public static void bindHUDFramebuffer() { // Framebuffer 3 - before mojang swaps the buffers, while evrth is drawing
-		RenderTarget target = Minecraft.getInstance().getMainRenderTarget();
-		GlTexture colorTexture = (GlTexture) target.getColorTexture();
-		GlDevice device = (GlDevice) RenderSystem.getDevice();
-		int fbo = colorTexture.getFbo(device.directStateAccess(), target.getDepthTexture());
-		GlStateManager._glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-		GlStateManager._viewport(0, 0, target.getColorTexture().getWidth(0), target.getColorTexture().getHeight(0));
-	}
-
 	public static void renderFrame(RenderContext context) {
 		Scale.INSTANCE.updateMatrix();
         Scissors.clear();
         DragManager.INSTANCE.beginFrame(context);
         DragManager.INSTANCE.update();
 
-		try (var ignored = GlState.capture()) {
-            if (context.equals(RenderContext.GUI)) {
-                bindGUIFramebuffer();
-            } else {
-                bindHUDFramebuffer();
-            }
-
-			glEnable(GL_BLEND);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-			glDisable(GL_DEPTH_TEST);
-			glDisable(GL_CULL_FACE);
-
-			context.fire();
-			BatchManager.INSTANCE.flushBatches(Scale.INSTANCE.getMatrix());
-		}
+        context.fire();
+        try (SpellFrame frame = SpellFrame.begin(context)) {
+            BatchManager.INSTANCE.flushBatches(frame, Scale.INSTANCE.getMatrix());
+        }
 	}
 
     public static void on(RenderContext context, Runnable listener) {

@@ -1,72 +1,82 @@
 package dev.harlik.impl.batch;
 
-import dev.harlik.api.scale.Scale;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.FilterMode;
 import dev.harlik.api.scissors.Region;
 import dev.harlik.impl.buffer.VertexFormat;
-import dev.harlik.impl.shader.Shader;
-import dev.harlik.impl.shader.ShaderManager;
+import dev.harlik.impl.gpu.FrameUniforms;
+import dev.harlik.impl.gpu.SpellFrame;
+import dev.harlik.impl.gpu.SpellPipelines;
+import java.nio.ByteBuffer;
+import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import lombok.Getter;
-import static org.lwjgl.opengl.GL33.*;
+import org.lwjgl.system.MemoryUtil;
 
 public class BatchManager {
 
     public static final BatchManager INSTANCE = new BatchManager();
 
+    /** Vertex data of every run starts on this boundary. */
+    private static final int RUN_ALIGNMENT = 16;
+
     @Getter
-    private RenderBatch rectangle, image, glass, text;
+    private final RenderBatch rectangle = new RenderBatch(SpellPipelines.RECTANGLE, VertexFormat.RECTANGLE, null);
+    @Getter
+    private final RenderBatch image = new RenderBatch(SpellPipelines.IMAGE, VertexFormat.RECTANGLE, SpellPipelines.TEXTURE_SAMPLER);
+    @Getter
+    private final RenderBatch text = new RenderBatch(SpellPipelines.TEXT, VertexFormat.TEXT, SpellPipelines.ATLAS_SAMPLER);
+    @Getter
+    private final RenderBatch glass = new RenderBatch(SpellPipelines.GLASS, VertexFormat.GLASS, null)
+            .bindings((pass, uniforms) -> {
+                pass.bindTexture(SpellPipelines.BACKGROUND_SAMPLER, BlurPyramid.INSTANCE.getFullView(),
+                        RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR, true));
+                pass.setUniform(SpellPipelines.GLASS_BLOCK, uniforms.glass());
+            });
 
-    public void init() {
-        rectangle = new RenderBatch(
-                ShaderManager.INSTANCE.getShader("rectangle"),
-                VertexFormat.RECTANGLE,
-                GL_TRIANGLES
-        );
-        image = new RenderBatch(
-                ShaderManager.INSTANCE.getShader("image"),
-                VertexFormat.RECTANGLE,
-                GL_TRIANGLES
-        );
-        glass = new RenderBatch(
-                ShaderManager.INSTANCE.getShader("glass"),
-                VertexFormat.GLASS,
-                GL_TRIANGLES
-        );
-        text = new RenderBatch(
-                ShaderManager.INSTANCE.getShader("text"),
-                VertexFormat.TEXT,
-                GL_TRIANGLES
-        );
+    private ByteBuffer vertexData;
 
-        Shader glassShader = ShaderManager.INSTANCE.getShader("glass");
-        int[] savedUnit1Texture = new int[1];
-        glass.preDraw(() -> {
-            int[] vp = new int[4];
-            glGetIntegerv(GL_VIEWPORT, vp);
-            int w = vp[2];
-            int h = vp[3];
+    public void flushBatches(SpellFrame frame, float[] projection) {
+        try {
+            List<Run> runs = collectRuns();
+            if (runs.isEmpty()) return;
 
-            glActiveTexture(GL_TEXTURE1);
-            savedUnit1Texture[0] = glGetInteger(GL_TEXTURE_BINDING_2D);
-            BlurPyramid.INSTANCE.build(w, h);
-            glActiveTexture(GL_TEXTURE0);
+            // Everything is uploaded up front, uploads are not allowed while a render pass is open
+            long[] offsets = new long[runs.size()];
+            long[] lengths = new long[runs.size()];
+            GpuBuffer vertices = frame.uploadVertices(packVertices(runs, offsets, lengths));
 
-            glassShader.setUniform1i("uBackground", 1);
-            glassShader.setUniform2f("uResolution", (float) w, (float) h);
-            glassShader.setUniform1f("uScale", w / Scale.INSTANCE.getViewportWidth());
-            glassShader.setUniform1f("uMaxLod", BlurPyramid.INSTANCE.getLevels());
-        });
-        glass.postDraw(() -> {
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, savedUnit1Texture[0]);
-            glActiveTexture(GL_TEXTURE0);
-        });
+            boolean withGlass = runs.stream().anyMatch(run -> run.batch() == glass);
+            if (withGlass) BlurPyramid.INSTANCE.ensure(frame.getWidth(), frame.getHeight());
+            FrameUniforms uniforms = FrameUniforms.upload(frame, projection, withGlass);
+
+            frame.beginPass();
+            for (int i = 0; i < runs.size(); i++) {
+                Run run = runs.get(i);
+                if (run.batch() == glass) {
+                    // The glass samples everything drawn so far, so the pass is split to capture it
+                    frame.endPass();
+                    BlurPyramid.INSTANCE.build(frame, uniforms);
+                    frame.beginPass();
+                }
+                if (!frame.scissors(run.scissors())) continue;
+                run.batch().draw(frame.pass(), vertices.slice(offsets[i], lengths[i]), run.entries(), uniforms);
+            }
+            frame.endPass();
+        } finally {
+            rectangle.clear();
+            image.clear();
+            text.clear();
+            glass.clear();
+        }
     }
 
-    public void flushBatches(float[] projection) {
+    /** Sorts every entry by z and splits them into runs that share a batch and scissors. */
+    private List<Run> collectRuns() {
         List<EntryRef> all = new ArrayList<>();
         for (RenderBatch.Entry e : rectangle.getEntries()) all.add(new EntryRef(rectangle, e));
         for (RenderBatch.Entry e : image.getEntries())     all.add(new EntryRef(image, e));
@@ -75,66 +85,59 @@ public class BatchManager {
 
         all.sort(Comparator.comparingDouble(ref -> ref.entry().z()));
 
-        int[] vp = new int[4];
-        glGetIntegerv(GL_VIEWPORT, vp);
-        float scale = vp[2] / Scale.INSTANCE.getViewportWidth();
-
-        glDisable(GL_SCISSOR_TEST);
-
-        RenderBatch currentBatch = null;
-        Region currentScissors = null;
-        List<RenderBatch.Entry> currentRun = new ArrayList<>();
-
+        List<Run> runs = new ArrayList<>();
+        Run current = null;
         for (EntryRef ref : all) {
-            Region entryScissors = ref.entry.scissors();
-            if ((ref.batch() != currentBatch) || !Objects.equals(entryScissors, currentScissors)) {
-                if (currentBatch != null && !currentRun.isEmpty()) {
-                    currentBatch.flush(projection, currentRun);
-                    currentRun.clear();
-                }
-                currentBatch = ref.batch();
-                if (!Objects.equals(entryScissors, currentScissors)) {
-                    applyScissors(entryScissors, scale, vp[3]);
-                    currentScissors = entryScissors;
-                }
+            Region entryScissors = ref.entry().scissors();
+            if (current == null || ref.batch() != current.batch() || !Objects.equals(entryScissors, current.scissors())) {
+                current = new Run(ref.batch(), entryScissors, new ArrayList<>());
+                runs.add(current);
             }
-            currentRun.add(ref.entry());
+            current.entries().add(ref.entry());
         }
-        if (currentBatch != null && !currentRun.isEmpty()) {
-            currentBatch.flush(projection, currentRun);
-        }
-
-        rectangle.clear();
-        image.clear();
-        text.clear();
-        glass.clear();
+        return runs;
     }
 
-    private void applyScissors(Region region, float scale, int viewportHeight) {
-        if (region == null) {
-            glDisable(GL_SCISSOR_TEST);
-            return;
+    /** Writes the vertices of all runs into one buffer, recording where each run starts and how long it is. */
+    private ByteBuffer packVertices(List<Run> runs, long[] offsets, long[] lengths) {
+        int total = 0;
+        for (int i = 0; i < runs.size(); i++) {
+            int floats = 0;
+            for (RenderBatch.Entry e : runs.get(i).entries()) floats += e.data().length;
+            offsets[i] = total;
+            lengths[i] = (long) floats * Float.BYTES;
+            total = alignUp(total + floats * Float.BYTES);
         }
-        int sx       = (int) Math.floor(region.x() * scale);
-        int sxMax    = (int) Math.ceil((region.x() + region.w()) * scale);
-        int syTopMin = (int) Math.floor(region.y() * scale);
-        int syTopMax = (int) Math.ceil((region.y() + region.h()) * scale);
-        int sw       = Math.max(0, sxMax - sx);
-        int sh       = Math.max(0, syTopMax - syTopMin);
-        int sy       = viewportHeight - syTopMax;
 
-        glEnable(GL_SCISSOR_TEST);
-        glScissor(sx, sy, sw, sh);
+        if (vertexData == null || vertexData.capacity() < total) {
+            int capacity = vertexData == null ? Math.max(total, 64 * 1024) : vertexData.capacity();
+            while (capacity < total) capacity *= 2;
+            if (vertexData != null) MemoryUtil.memFree(vertexData);
+            vertexData = MemoryUtil.memAlloc(capacity);
+        }
+        vertexData.clear();
+
+        for (int i = 0; i < runs.size(); i++) {
+            FloatBuffer floats = vertexData.position((int) offsets[i]).asFloatBuffer();
+            for (RenderBatch.Entry e : runs.get(i).entries()) floats.put(e.data());
+        }
+        vertexData.position(0).limit(total);
+        return vertexData;
+    }
+
+    private static int alignUp(int value) {
+        return (value + RUN_ALIGNMENT - 1) & -RUN_ALIGNMENT;
     }
 
     public void destroy() {
-        rectangle.destroy();
-        image.destroy();
-        text.destroy();
-        glass.destroy();
         BlurPyramid.INSTANCE.destroy();
+        if (vertexData != null) {
+            MemoryUtil.memFree(vertexData);
+            vertexData = null;
+        }
     }
 
     private record EntryRef(RenderBatch batch, RenderBatch.Entry entry) {}
 
+    private record Run(RenderBatch batch, Region scissors, List<RenderBatch.Entry> entries) {}
 }

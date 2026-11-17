@@ -4,17 +4,17 @@ import dev.harlik.impl.batch.RenderBatch;
 import dev.harlik.impl.batch.TextureCache;
 import dev.harlik.impl.buffer.VertexFormat;
 import java.awt.Color;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public class ShapeImage extends Shape<ShapeImage> {
 
     private float width, height;
-    private ResourceLocation texture;
+    private Identifier texture;
     private Color color = Color.WHITE;
     private float radiusTL, radiusTR, radiusBR, radiusBL;
     private float smoothness;
 
-    public ShapeImage(RenderBatch batch, ResourceLocation texture) {
+    public ShapeImage(RenderBatch batch, Identifier texture) {
         super(batch);
         this.texture = texture;
     }

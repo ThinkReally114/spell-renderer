@@ -1,15 +1,17 @@
-#version 330 core
+#version 330
 
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aSize;
-layout(location = 2) in vec4 aColor;
-layout(location = 3) in vec4 aRadius;
-layout(location = 4) in float aSmooth;
-layout(location = 5) in vec2 aUV;
-layout(location = 6) in vec4 aGlass;
-layout(location = 7) in float aHighlight;
+layout(std140) uniform SpellProjection {
+    mat4 uProjection;
+};
 
-uniform mat4 uProjection;
+in vec2 aPos;
+in vec2 aSize;
+in vec4 aColor;
+in vec4 aRadius;
+in float aSmooth;
+in vec2 aUV;
+in vec4 aGlass;
+in float aHighlight;
 
 out vec2 vSize;
 out vec4 vColor;
@@ -18,6 +20,7 @@ out float vSmooth;
 out vec2 vUV;
 out vec4 vGlass;
 out float vHighlight;
+out vec2 vScreenUV; // 0..1 across the target, row 0 at the bottom on both GL and Vulkan
 
 void main() {
     gl_Position = uProjection * vec4(aPos, 0.0, 1.0);
@@ -28,4 +31,5 @@ void main() {
     vUV = aUV;
     vGlass = aGlass;
     vHighlight = aHighlight;
+    vScreenUV = gl_Position.xy * 0.5 + 0.5;
 }

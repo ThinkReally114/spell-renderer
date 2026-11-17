@@ -1,4 +1,4 @@
-#version 330 core
+#version 330
 
 // thnx to https://medium.com/@aghajari/liquid-glass-ios-effect-explanation-dabadd6414ae
 
@@ -9,11 +9,15 @@ in float vSmooth;
 in vec2 vUV;
 in vec4 vGlass; // blur, refraction, chromatic, saturation
 in float vHighlight;
+in vec2 vScreenUV;
 
 uniform sampler2D uBackground; // mipmapped Kawase pyramid, level 0 is the sharp background
-uniform vec2 uResolution;      // framebuffer pixels
-uniform float uScale;          // framebuffer pixels per shape unit
-uniform float uMaxLod;
+
+layout(std140) uniform SpellGlass {
+    vec2 uResolution; // framebuffer pixels
+    float uScale;     // framebuffer pixels per shape unit
+    float uMaxLod;
+};
 
 out vec4 fragColor;
 
@@ -78,7 +82,7 @@ void main() {
     float edgeT = 1.0 - clamp(-dist / (min(halfSize.x, halfSize.y) * 0.3), 0.0, 1.0);
     float lens = 1.0 - sqrt(max(1.0 - edgeT * edgeT, 0.0));
 
-    vec2 screenUV = gl_FragCoord.xy / uResolution;
+    vec2 screenUV = vScreenUV;
     vec2 refractPx = lens * p * refraction * uScale;
     refractPx.y = -refractPx.y; // shape space is y-down
     vec2 uv = screenUV - refractPx / uResolution;
