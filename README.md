@@ -32,18 +32,18 @@ repositories {
 }
 
 dependencies {
-    modImplementation "maven.modrinth:spell-renderer:26.4"
+    implementation "maven.modrinth:spell-renderer:26.5"
 
     // Optional: bundle Spell Renderer inside your mod JAR
     // so users don't need to install it separately.
-    include "maven.modrinth:spell-renderer:26.4"
+    include "maven.modrinth:spell-renderer:26.5"
 }
 ```
 
 ### Maven
 ```maven
 <repositories>
-    <repository>[spell-renderer-26.4.jar](build/libs/spell-renderer-26.4.jar)
+    <repository>
         <id>modrinth</id>
         <url>https://api.modrinth.com/maven</url>
     </repository>
@@ -53,7 +53,7 @@ dependencies {
     <dependency>
         <groupId>maven.modrinth</groupId>
         <artifactId>spell-renderer</artifactId>
-        <version>26.4</version>
+        <version>26.5</version>
     </dependency>
 </dependencies>
 ```
@@ -61,7 +61,7 @@ dependencies {
 ### fabric.mod.json
 ```json
 "depends": {
-  "spell-renderer": "26.4"
+  "spell-renderer": "26.5"
 }
 ```
 
