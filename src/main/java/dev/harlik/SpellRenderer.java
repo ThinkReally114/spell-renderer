@@ -5,6 +5,7 @@ import dev.harlik.api.builder.Builder;
 import dev.harlik.api.builder.shapes.ShapeGlass;
 import dev.harlik.api.font.FontManager;
 import dev.harlik.api.scale.Scale;
+import dev.harlik.api.scissors.Region;
 import dev.harlik.api.scissors.Scissors;
 import dev.harlik.impl.batch.BatchManager;
 import dev.harlik.impl.drag.DragManager;
@@ -29,6 +30,7 @@ public class SpellRenderer implements ClientModInitializer {
         FontManager.INSTANCE.init();
 
         if (FabricLoader.getInstance().isDevelopmentEnvironment()) {
+            DragManager.INSTANCE.setSnapper(SpellRenderer::snapTest);
             SpellRenderer.on(RenderContext.GUI, () -> {
                 Builder.rect()
                         .pos(10, 10, 2)
@@ -88,6 +90,8 @@ public class SpellRenderer implements ClientModInitializer {
                         .color(Color.WHITE)
                         .parent(panel)
                         .submit();
+
+                dragOverlayTest(RenderContext.GUI);
             });
             SpellRenderer.on(RenderContext.HUD, () -> {
                 var hudPanel = Builder.rect()
@@ -109,6 +113,8 @@ public class SpellRenderer implements ClientModInitializer {
                         .color(Color.ORANGE)
                         .parent(hudPanel)
                         .submit();
+
+                dragOverlayTest(RenderContext.HUD);
             });
         }
 	}
@@ -137,6 +143,55 @@ public class SpellRenderer implements ClientModInitializer {
                 .size(16)
                 .color(Color.WHITE)
                 .parent(backdrop)
+                .submit();
+    }
+
+    /** Dev only: snaps the dragged panel to the screen center and to the left/top edges of other panels. */
+    private static Region snapTest(String id, Region proposed) {
+        float x = proposed.x(), y = proposed.y();
+        float centerX = Scale.INSTANCE.getViewportWidth() / 2, centerY = Scale.INSTANCE.getViewportHeight() / 2;
+
+        if (Math.abs(x + proposed.w() / 2 - centerX) < 8) x = centerX - proposed.w() / 2;
+        if (Math.abs(y + proposed.h() / 2 - centerY) < 8) y = centerY - proposed.h() / 2;
+
+        for (var other : DragManager.INSTANCE.getAllBounds().entrySet()) {
+            if (other.getKey().equals(id)) continue;
+            Region b = other.getValue();
+            if (Math.abs(x - b.x()) < 8) x = b.x();
+            if (Math.abs(y - b.y()) < 8) y = b.y();
+        }
+        return new Region(x, y, proposed.w(), proposed.h());
+    }
+
+    /** Dev only: dims the screen under the dragged panel and draws a guide for every line it snapped to.
+     *  Drawn in the drag's own context, so a GUI dim never covers a HUD panel. */
+    private static void dragOverlayTest(RenderContext context) {
+        Region active = DragManager.INSTANCE.getActiveBounds();
+        if (active == null || DragManager.INSTANCE.getActiveContext() != context) return;
+
+        float w = Scale.INSTANCE.getViewportWidth(), h = Scale.INSTANCE.getViewportHeight();
+        Builder.rect()
+                .pos(0, 0, 4) // below the panels (z 5), above everything else
+                .size(w, h)
+                .color(new Color(0, 0, 0, 120))
+                .submit();
+
+        if (Math.abs(active.x() + active.w() / 2 - w / 2) < 0.5f) guideTest(w / 2, 0, 1, h);
+        if (Math.abs(active.y() + active.h() / 2 - h / 2) < 0.5f) guideTest(0, h / 2, w, 1);
+
+        for (var other : DragManager.INSTANCE.getAllBounds().entrySet()) {
+            if (other.getKey().equals(DragManager.INSTANCE.getActiveId())) continue;
+            Region b = other.getValue();
+            if (Math.abs(active.x() - b.x()) < 0.5f) guideTest(b.x(), 0, 1, h);
+            if (Math.abs(active.y() - b.y()) < 0.5f) guideTest(0, b.y(), w, 1);
+        }
+    }
+
+    private static void guideTest(float x, float y, float w, float h) {
+        Builder.rect()
+                .pos(x, y, 10)
+                .size(w, h)
+                .color(Color.CYAN)
                 .submit();
     }
 

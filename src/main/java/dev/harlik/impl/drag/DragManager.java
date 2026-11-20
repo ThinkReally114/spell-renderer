@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.Getter;
+import lombok.Setter;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.ChatScreen;
 import static org.lwjgl.glfw.GLFW.*;
@@ -46,8 +47,11 @@ public class DragManager {
     private State state = State.IDLE;
     @Getter
     private String activeId;
+    @Getter
     private RenderContext activeContext;
     private float pressX, pressY, grabDx, grabDy;
+    @Setter
+    private Snapper snapper;
 
     /** Starts a render pass: last pass's registrations become hit-testable, new ones start collecting. */
     public void beginFrame(RenderContext context) {
@@ -133,6 +137,12 @@ public class DragManager {
 
         float ox = mx - grabDx, oy = my - grabDy;
         if (reg.hasSelf) {
+            if (snapper != null) {
+                Region snapped = snapper.snap(activeId, new Region(reg.baseX + ox, reg.baseY + oy, reg.selfW, reg.selfH));
+                ox = snapped.x() - reg.baseX;
+                oy = snapped.y() - reg.baseY;
+            }
+
             ox = clamp(ox, -reg.baseX, Scale.INSTANCE.getViewportWidth() - reg.selfW - reg.baseX);
             oy = clamp(oy, -reg.baseY, Scale.INSTANCE.getViewportHeight() - reg.selfH - reg.baseY);
         }
@@ -159,6 +169,35 @@ public class DragManager {
 
     public boolean isDragging() {
         return state == State.DRAGGING;
+    }
+
+    /** Returns the on-screen bounds of a draggable shape, or null if it wasn't drawn last frame. */
+    public Region getBounds(String id) {
+        for (var entry : committed.entrySet()) {
+            if (!isFresh(entry.getKey())) continue;
+            Registration reg = entry.getValue().get(id);
+            if (reg != null && reg.hasSelf)
+                return new Region(reg.baseX + offsetX(id), reg.baseY + offsetY(id), reg.selfW, reg.selfH);
+        }
+        return null;
+    }
+
+    /** Returns the bounds of every draggable shape drawn last frame, keyed by drag id. */
+    public Map<String, Region> getAllBounds() {
+        Map<String, Region> all = new HashMap<>();
+        for (var entry : committed.entrySet()) {
+            if (!isFresh(entry.getKey())) continue;
+            entry.getValue().forEach((id, reg) -> {
+                if (reg.hasSelf)
+                    all.put(id, new Region(reg.baseX + offsetX(id), reg.baseY + offsetY(id), reg.selfW, reg.selfH));
+            });
+        }
+        return all;
+    }
+
+    /** Returns the region for an actively dragged shape, or null if there's no active shape. */
+    public Region getActiveBounds() {
+        return isDragging() ? getBounds(activeId) : null;
     }
 
     private String hitTest(RenderContext context, float mx, float my) {
