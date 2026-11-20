@@ -180,6 +180,53 @@ DragManager.INSTANCE.reset("panel");                                            
 
 `DragManager.INSTANCE.isDragging()` and `getActiveId()` tell you what is being dragged right now.
 
+#### Drag overlays & snapping
+
+`DragManager.INSTANCE.getActiveBounds()` returns the on-screen bounds of the shape being dragged (or `null`), and `getActiveContext()` tells you which context it's in. Use them to draw your own overlay, like a dimmed screen while dragging:
+
+```java
+SpellRenderer.on(RenderContext.HUD, () -> {
+    // ... your draggable HUD panels at z 5
+
+    Region active = DragManager.INSTANCE.getActiveBounds();
+    if (active == null || DragManager.INSTANCE.getActiveContext() != RenderContext.HUD) return;
+
+    Builder.rect()
+            .pos(0, 0, 4) // below the panels, above everything else
+            .size(Scale.INSTANCE.getViewportWidth(), Scale.INSTANCE.getViewportHeight())
+            .color(new Color(0, 0, 0, 120))
+            .submit();
+});
+```
+
+> Draw the overlay in the same context as the dragged shape. `GUI` renders on top of `HUD`, so a `GUI` overlay would cover a `HUD` panel.
+
+To snap, set a `Snapper`. It's called every frame while dragging with where the shape would be if it followed the mouse, and returns where it should go instead. Only `x` and `y` of
+the result are used, `null` means don't snap, and the result is still clamped
+
+```java
+DragManager.INSTANCE.setSnapper((id, proposed) -> {
+    float x = proposed.x(), y = proposed.y();
+
+    // snap to the screen center
+    float centerX = Scale.INSTANCE.getViewportWidth() / 2;
+    if (Math.abs(x + proposed.w() / 2 - centerX) < 8) x = centerX - propose
+
+    // align with other draggables
+    for (var other : DragManager.INSTANCE.getAllBounds().entrySet()) {
+        if (other.getKey().equals(id)) continue;
+        Region b = other.getValue();
+        if (Math.abs(x - b.x()) < 8) x = b.x();
+        if (Math.abs(y - b.y()) < 8) y = b.y();
+    }
+    return new Region(x, y, proposed.w(), proposed.h());
+});
+```
+
+- Don't draw inside the snapper; it runs once per render pass. Draw snap guides in your overlay by comparing `getActiveBounds()` with your snap lines.
+- `getBounds("id")` and `getAllBounds()` return the current bounds of any dUD` draggables are skipped when the `HUD` isn't rendered (no world loaded).
+- Coordinates are in the same space as `.pos()`, so they follow `Scale`. A snap distance of `8` grows with the scale; use `8 / Scale.INSTANCE.getScale()` for a fixed pixel distance.
+
 ## License
 
 [MIT](LICENSE)
