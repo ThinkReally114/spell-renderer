@@ -15,6 +15,11 @@ import java.util.OptionalInt;
 import lombok.Getter;
 import net.minecraft.client.Minecraft;
 
+/**
+ * One render of a {@link RenderContext} into Minecraft's main render target.
+ * Owns the command encoder and the open render pass, which has to be closed before any upload or texture copy.
+ * Vanilla submits the encoder after it blits the main target to the window, so this never submits.
+ */
 public final class SpellFrame implements AutoCloseable {
 
     private record Buffers(DynamicBuffer vertices, DynamicBuffer uniforms) {}

@@ -20,6 +20,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
 
+/**
+ * Every render pipeline spell-renderer draws with. A pipeline bundles the shaders with the fixed state
+ * (blend, cull, depth, vertex layout, uniforms and samplers).
+ * Shader sources live in {@code assets/spell-renderer/shaders/core/}.
+ */
 public final class SpellPipelines {
 
     /** Uniform block holding the orthographic projection, see {@code rectangle.vsh}. */

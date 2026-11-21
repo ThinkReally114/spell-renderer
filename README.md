@@ -2,6 +2,8 @@
 
 A fast, lightweight 2D renderer for Minecraft, designed for rendering 2D objects with a clean, fluent API. This branch targets Minecraft Fabric 1.21.11 and its OpenGL render backend.
 
+> The 1.21.11 port was contributed by [ThinkReally114](https://github.com/ThinkReally114), thanks!
+
 ![preview](.github/assets/preview.png)
 
 ## Features
@@ -23,36 +25,20 @@ A fast, lightweight 2D renderer for Minecraft, designed for rendering 2D objects
 - Fabric API: `0.141.6+1.21.11`
 - Java: `21`
 
-## Building this branch
-
-Run `./gradlew build -x test` with JDK 21. On Windows, use `gradlew.bat build -x test`.
-The remapped mod JAR is written to `build/libs/spell-renderer-26.5+1.21.11.jar`.
-This branch uses Mojang mappings and preserves the current shape, glass, text, scissors, dragging, and snapping APIs.
-This port is not published to Modrinth. Run `./gradlew publishToMavenLocal` (or `gradlew.bat publishToMavenLocal` on Windows) before using the local dependency examples below.
-
-### In-game verification
-
-Launch a Fabric 1.21.11 client with Fabric API and the remapped JAR, or use `./gradlew runClient` for the built-in development demo.
-
-- Check rectangles, circles, images, MSDF text, and each glass variant.
-- Check HUD panels in a world, behind inventory/chat/pause screens, with menu blur enabled and disabled.
-- Check GUI overlays remain above vanilla screens and tooltips.
-- Check dragging, snapping, clipping, and mouse input after changing window size, GUI scale, and renderer scale.
-
 ## Installation
 
 ### Gradle
 ```gradle
 repositories {
-    mavenLocal()
+    maven { url = "https://api.modrinth.com/maven" }
 }
 
 dependencies {
-    modImplementation "dev.harlik:spell-renderer:26.5+1.21.11"
+    modImplementation "maven.modrinth:spell-renderer:26.5+1.21.11"
 
     // Optional: bundle Spell Renderer inside your mod JAR
     // so users don't need to install it separately.
-    include "dev.harlik:spell-renderer:26.5+1.21.11"
+    include "maven.modrinth:spell-renderer:26.5+1.21.11"
 }
 ```
 
@@ -60,14 +46,14 @@ dependencies {
 ```maven
 <repositories>
     <repository>
-        <id>local</id>
-        <url>file://${user.home}/.m2/repository</url>
+        <id>modrinth</id>
+        <url>https://api.modrinth.com/maven</url>
     </repository>
 </repositories>
 
 <dependencies>
     <dependency>
-        <groupId>dev.harlik</groupId>
+        <groupId>maven.modrinth</groupId>
         <artifactId>spell-renderer</artifactId>
         <version>26.5+1.21.11</version>
     </dependency>
