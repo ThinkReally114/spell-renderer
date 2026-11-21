@@ -1,6 +1,6 @@
 # Spell Renderer
 
-A fast, lightweight 2D renderer for Minecraft, designed for rendering 2D objects with a clean, fluent API. Built on Minecraft's own render API, so it works with both the OpenGL and the Vulkan backend.
+A fast, lightweight 2D renderer for Minecraft, designed for rendering 2D objects with a clean, fluent API. This branch targets Minecraft Fabric 1.21.11 and its OpenGL render backend.
 
 ![preview](.github/assets/preview.png)
 
@@ -18,25 +18,41 @@ A fast, lightweight 2D renderer for Minecraft, designed for rendering 2D objects
 
 ## Requirements
 
-- Minecraft: `26.2`
+- Minecraft: `1.21.11`
 - Fabric Loader: `>=0.20.1`
-- Fabric API: `0.161.0+26.2`
-- Java: `25`
+- Fabric API: `0.141.6+1.21.11`
+- Java: `21`
+
+## Building this branch
+
+Run `./gradlew build -x test` with JDK 21. On Windows, use `gradlew.bat build -x test`.
+The remapped mod JAR is written to `build/libs/spell-renderer-26.5+1.21.11.jar`.
+This branch uses Mojang mappings and preserves the current shape, glass, text, scissors, dragging, and snapping APIs.
+This port is not published to Modrinth. Run `./gradlew publishToMavenLocal` (or `gradlew.bat publishToMavenLocal` on Windows) before using the local dependency examples below.
+
+### In-game verification
+
+Launch a Fabric 1.21.11 client with Fabric API and the remapped JAR, or use `./gradlew runClient` for the built-in development demo.
+
+- Check rectangles, circles, images, MSDF text, and each glass variant.
+- Check HUD panels in a world, behind inventory/chat/pause screens, with menu blur enabled and disabled.
+- Check GUI overlays remain above vanilla screens and tooltips.
+- Check dragging, snapping, clipping, and mouse input after changing window size, GUI scale, and renderer scale.
 
 ## Installation
 
 ### Gradle
 ```gradle
 repositories {
-    maven { url = "https://api.modrinth.com/maven" }
+    mavenLocal()
 }
 
 dependencies {
-    implementation "maven.modrinth:spell-renderer:26.5"
+    modImplementation "dev.harlik:spell-renderer:26.5+1.21.11"
 
     // Optional: bundle Spell Renderer inside your mod JAR
     // so users don't need to install it separately.
-    include "maven.modrinth:spell-renderer:26.5"
+    include "dev.harlik:spell-renderer:26.5+1.21.11"
 }
 ```
 
@@ -44,16 +60,16 @@ dependencies {
 ```maven
 <repositories>
     <repository>
-        <id>modrinth</id>
-        <url>https://api.modrinth.com/maven</url>
+        <id>local</id>
+        <url>file://${user.home}/.m2/repository</url>
     </repository>
 </repositories>
 
 <dependencies>
     <dependency>
-        <groupId>maven.modrinth</groupId>
+        <groupId>dev.harlik</groupId>
         <artifactId>spell-renderer</artifactId>
-        <version>26.5</version>
+        <version>26.5+1.21.11</version>
     </dependency>
 </dependencies>
 ```
@@ -61,7 +77,7 @@ dependencies {
 ### fabric.mod.json
 ```json
 "depends": {
-  "spell-renderer": "26.5"
+  "spell-renderer": "26.5+1.21.11"
 }
 ```
 
